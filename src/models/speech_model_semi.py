@@ -1,7 +1,6 @@
-import torch
 import torch.nn as nn
-from timbre_encoder import TimbreEncoder
-from semantic_encoder import SemanticEncoder
+from src.models.timbre_encoder import TimbreEncoder
+from src.models.semantic_encoder import SemanticEncoder
 
 
 # Complete Speech Model combining both encoders

@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 from transformers import HubertModel
 from sklearn.cluster import MiniBatchKMeans
-from timbre_encoder import CrossAttention
+from src.models.timbre_encoder import CrossAttention
 
 
 class ConformerBlock(nn.Module):

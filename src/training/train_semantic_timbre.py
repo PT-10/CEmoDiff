@@ -1,4 +1,16 @@
+import os
 import torch
+import wandb
+import random
+import numpy as np
+from tqdm import tqdm
+from sklearn.metrics import accuracy_score
+from src.utils.utilities import get_config, clear_memory
+from src.models.speech_model_semi import SpeechModel
+from src.data.semantic_timbre_dataloader import create_dataloaders
+from src.utils.loss_functions import MultiTaskLoss
+import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 def pretrain_kmeans(model, train_loader, num_samples=100000):
@@ -216,3 +228,115 @@ def load_checkpoint(model, criterion, optimizer, scheduler, filepath):
     best_val_acc = checkpoint.get('val_acc', 0.0)
     
     return start_epoch, best_val_loss, best_val_acc
+
+if __name__ == "__main__":
+    global device 
+
+    global config
+    config = get_config("src/config/semantic_timbre_training_config.yaml")
+
+    torch.manual_seed(config['seed'])
+    np.random.seed(config['seed'])
+    random.seed(config['seed'])
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config['seed'])
+
+    # Set device
+    device = torch.device(f"cuda:{config['gpu']}" if config['gpu'] >= 0 and torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # Create output and log directories
+    os.makedirs(config['output_dir'], exist_ok=True)
+    os.makedirs(config['log_dir'], exist_ok=True)
+
+    # Initialize wandb if requested
+    if config['wandb']:
+        wandb.init(project="speech-model", config=config)
+
+    """Main training function"""
+    # Create data loaders
+    num_speakers = 100
+    train_loader, val_loader, test_loader = create_dataloaders(
+        root_dir=config['data_dir'],
+        metadata_file=config['metadata_file'],
+        batch_size=config['batch_size'],
+        num_workers=config['num_workers'],
+        segment_length=config['segment_length']
+    )
+    
+    print(f"Loaded dataset with {num_speakers} speakers")
+    
+    # Create model
+    model = SpeechModel().to(device)
+    print("Model init, loaded to device")
+    
+    # Create multi-task loss
+    criterion = MultiTaskLoss(
+        num_speakers=num_speakers,
+        contrastive_weight=config['contrastive_loss_weight'],
+        semantic_weight=config['semantic_loss_weight'],
+        speaker_weight=config['speaker_loss_weight'],
+        temperature=config['temperature']
+    )
+    
+    # Create optimizer (joint optimization of model and loss components)
+    optimizer = optim.AdamW(
+        list(model.parameters()) + criterion.get_parameters(),
+        lr=config['lr'],
+        weight_decay=config['weight_decay']
+    )
+    
+    # Learning rate scheduler
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+    
+    # Initialize variables
+    start_epoch = 0
+    best_val_loss = float('inf')
+    best_val_acc = 0.0
+
+    if not config['no_kmeans_pretrain'] and start_epoch == 0:
+        pretrain_kmeans(model, train_loader)
+    
+    # Training loop
+    for epoch in range(start_epoch, config['epochs']):
+        print(f"\nEpoch {epoch+1}/{config['epochs']}")
+        
+        # Train
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, epoch)
+        
+        # Validate
+        val_loss, val_acc = validate(model, val_loader, criterion, epoch)
+        
+        # Update learning rate
+        scheduler.step(val_loss)
+        
+        # Save checkpoint periodically
+        if (epoch + 1) % config['save_interval'] == 0:
+            save_checkpoint(
+                model, criterion, optimizer, scheduler, epoch, val_loss, val_acc,
+                os.path.join(config['output_dir'], f"checkpoint_epoch{epoch+1}.pt")
+            )
+        
+        # Save best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            save_checkpoint(
+                model, criterion, optimizer, scheduler, epoch, val_loss, val_acc,
+                os.path.join(config['output_dir'], "best_loss_checkpoint.pt")
+            )
+        
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            save_checkpoint(
+                model, criterion, optimizer, scheduler, epoch, val_loss, val_acc,
+                os.path.join(config['output_dir'], "best_acc_checkpoint.pt")
+            )
+
+        clear_memory()
+    # Save final model
+    save_checkpoint(
+        model, criterion, optimizer, scheduler, epoch, val_loss, val_acc,
+        os.path.join(config['output_dir'], "final_checkpoint.pt")
+    )
+    
+    print("Training completed!")
