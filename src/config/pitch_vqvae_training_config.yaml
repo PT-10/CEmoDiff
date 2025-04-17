@@ -1,0 +1,28 @@
+# Dataset parameters
+data_dir: src/dataset/LibriTTS/train-clean-100
+sample_rate: 22050
+hop_length: 256
+min_f0: 50.0
+max_f0: 600.0
+segment_length: 88200  # 22050 * 4
+
+# Model parameters
+codebook_size: 64
+embedding_dim: 128
+hidden_dim: 256
+reconstruction_coef: 1.0
+commitment_coef: 0.15
+vq_coef: 0.05
+
+# Training parameters
+batch_size: 16
+epochs: 25
+learning_rate: 0.0001
+num_workers: 4
+seed: 42
+
+# Logging parameters
+save_dir: src/checkpoints/pitch_vqvae_checkpoints
+save_interval: 10
+log_interval: 10
+viz_interval: 10

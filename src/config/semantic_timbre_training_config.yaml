@@ -1,20 +1,25 @@
-data_dir: /kaggle/input/libritts/LibriTTS/train-clean-100
+data_dir: src/dataset/LibriTTS/train-clean-100
 metadata_file: null
-output_dir: /kaggle/working/checkpoints
-log_dir: /kaggle/working/logs
+output_dir: src/checkpoints/semantic_timbre_checkpoints
+log_dir: src/logs/semantic_timbre_logs
+
+# Training parameters
 batch_size: 16
 num_workers: 4
 epochs: 30
 lr: 0.0001
 weight_decay: 0.0001
-segment_length: 16000
-contrastive_loss_weight: 1.0
-semantic_loss_weight: 1.0
-speaker_loss_weight: 1.0
-temperature: 0.07
 seed: 42
 gpu: 0
 save_interval: 5
 resume: null
 wandb: true
 no_kmeans_pretrain: false
+
+# Model parameters
+segment_length: 16000
+contrastive_loss_weight: 1.0
+semantic_loss_weight: 1.0
+speaker_loss_weight: 1.0
+temperature: 0.07
+
